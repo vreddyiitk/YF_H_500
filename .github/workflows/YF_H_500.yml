@@ -1,0 +1,56 @@
+name: Nifty 500 Hourly Charts
+on:
+  schedule:
+    - cron: '0 10 * * 1-5'   # 21:30 UTC = 4:00 PM ET (after NYSE close)
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  generate-charts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5.4.0
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas openpyxl matplotlib
+
+      - name: Run chart generator
+        run: python YF_H_500_Final.py
+
+      - name: Check charts output
+        run: |
+          echo "=== Current directory ==="
+          ls -la
+          echo "=== Charts folder ==="
+          ls -la YF_H_500/ || echo "YF_H_500/ folder does not exist!"
+
+      - name: Zip charts folder
+        run: |
+          if [ -d "YF_H_500" ] && [ "$(ls -A YF_H_500)" ]; then
+            cd YF_H_500
+            ZIP_NAME="charts_NSE500_$(date +'%Y-%m-%d').zip"
+            zip -j "../${ZIP_NAME}" *.png
+            cd ..
+            echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+            echo "Created: ${ZIP_NAME}"
+            ls -lh "${ZIP_NAME}"
+          else
+            echo "ERROR: YF_H_500 folder is empty or missing"
+            ls -la
+            exit 1
+          fi
+
+      - name: Create GitHub Release with charts
+        uses: softprops/action-gh-release@v2.2.1
+        with:
+          tag_name: charts-NSE500H-${{ github.run_number }}
+          name: "NSE FNO - ${{ github.run_number }}"
+          files: ${{ env.ZIP_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
