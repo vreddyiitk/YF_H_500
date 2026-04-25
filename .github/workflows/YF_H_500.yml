@@ -1,7 +1,5 @@
 name: Nifty 500 Hourly Charts
 on:
-  schedule:
-    - cron: '0 10 * * 1-5'   # 21:30 UTC = 4:00 PM ET (after NYSE close)
   workflow_dispatch:
 permissions:
   contents: write
