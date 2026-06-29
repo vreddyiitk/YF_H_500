@@ -1,14 +1,25 @@
-name: Nifty 500 Hourly Charts
+name: Stock_Charts_10Cr
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   generate-charts:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4.2.2
+
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update -q
+          sudo apt-get install -y google-chrome-stable
 
       - name: Set up Python
         uses: actions/setup-python@v5.4.0
@@ -16,7 +27,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install yfinance pandas openpyxl matplotlib
+        run: pip install yfinance pandas openpyxl matplotlib selenium webdriver-manager
 
       - name: Run chart generator
         run: python YF_H_500_New.py
@@ -26,20 +37,21 @@ jobs:
           echo "=== Current directory ==="
           ls -la
           echo "=== Charts folder ==="
-          ls -la YF_H_500/ || echo "YF_H_500/ folder does not exist!"
+          ls -la YF_H_TO_10Cr/ || echo "YF_H_TO_10Cr/ folder does not exist!"
 
       - name: Zip charts folder
         run: |
-          if [ -d "YF_H_500" ] && [ "$(ls -A YF_H_500)" ]; then
-            cd YF_H_500
-            ZIP_NAME="charts_NSE500_$(date +'%Y-%m-%d').zip"
+          FOLDER="YF_H_TO_10Cr"
+          if [ -d "$FOLDER" ] && [ "$(ls -A $FOLDER)" ]; then
+            cd "$FOLDER"
+            ZIP_NAME="charts_NSE_10Cr_$(date +'%Y-%m-%d').zip"
             zip -j "../${ZIP_NAME}" *.png
             cd ..
-            echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+            echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
             echo "Created: ${ZIP_NAME}"
             ls -lh "${ZIP_NAME}"
           else
-            echo "ERROR: YF_H_500 folder is empty or missing"
+            echo "ERROR: $FOLDER folder is empty or missing"
             ls -la
             exit 1
           fi
@@ -47,8 +59,8 @@ jobs:
       - name: Create GitHub Release with charts
         uses: softprops/action-gh-release@v2.2.1
         with:
-          tag_name: charts-NSE500H-${{ github.run_number }}
-          name: "NSE FNO - ${{ github.run_number }}"
+          tag_name: charts-NSE-10Cr-${{ github.run_number }}
+          name: "NSE 10Cr Filter - Run ${{ github.run_number }}"
           files: ${{ env.ZIP_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
