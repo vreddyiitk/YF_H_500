@@ -764,14 +764,15 @@ def generate_charts(filtered_df):
 
             # * Keep only NSE trading hours (09:15-15:30 IST)
             if df.index.tzinfo is not None:
-                df_ist = df.copy()
-                df_ist.index = df_ist.index.tz_convert("Asia/Kolkata")
+              df_ist = df.copy()
+              df_ist.index = df_ist.index.tz_convert("Asia/Kolkata")
                 market_mask = (
-                    (df_ist.index.time >= datetime.time(9, 15)) &
-                    (df_ist.index.time <= datetime.time(15, 30))
+                (df_ist.index.time >= datetime.time(9, 15)) &
+                (df_ist.index.time <= datetime.time(15, 30))
                 )
-                df = df[market_mask.values]
-
+               df = df_ist[market_mask]   # filter df_ist, keep IST index
+            else:
+               df_ist = df
             df = df.tail(MAX_BARS)         # * cap at MAX_BARS hourly candles
 
             if len(df) < MACD_SLOW + MACD_SIGNAL + 5:
