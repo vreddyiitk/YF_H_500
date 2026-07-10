@@ -1,29 +1,29 @@
 """
-chart_generator_hourly.py  —  NSE Live Edition (HOURLY)
-=========================================================
+chart_generator_75min.py  —  NSE Live Edition (75-MINUTE)
+==========================================================
 Combines:
-  • STEP 1  — Live NSE "Stocks Traded" download  (from nse_pipeline.py)
-  • STEP 2  — Filter EQ series, Value > ₹10 Cr   (from nse_pipeline.py)
-  • STEP 3  — TradingView-style dark HOURLY charts
+  • STEP 1  — Live NSE "Stocks Traded" download  (Selenium + XHR)
+  • STEP 2  — Filter EQ series, Value > ₹10 Cr
+  • STEP 3  — TradingView-style dark 75-MIN charts
 
 Charts contain:
-  - Candlestick price chart  (wider, more visible bars)
+  - Candlestick price chart
   - 9-bar EMA overlay
   - Standard MACD subplot (12, 26, 9)
   - 20-bar recent low annotation (dashed line + % below current close)
+
+Strategy for 75-min bars:
+  yfinance does not support 75m natively. We download 1h data and
+  resample to 75-minute OHLCV bars using pandas resample().
+  closed="left", label="left" ensures bars are labelled at open time.
 
 Requirements:
     pip install selenium webdriver-manager yfinance pandas openpyxl matplotlib
 
 Usage:
-    python chart_generator_hourly.py                   # headless browser
-    python chart_generator_hourly.py --visible         # visible browser (local debug)
-    python chart_generator_hourly.py --from-csv FILE   # skip browser, use saved CSV
-
-Notes on yfinance hourly data:
-  - yfinance returns 1h data up to ~730 calendar days back, but quality
-    degrades beyond ~60 days. PERIOD_DAYS=60 is a safe default.
-  - Timestamps are UTC; converted to IST (UTC+5:30) for display.
+    python chart_generator_75min.py                   # headless browser
+    python chart_generator_75min.py --visible         # visible browser (debug)
+    python chart_generator_75min.py --from-csv FILE   # skip browser, use CSV
 """
 
 import sys
@@ -68,7 +68,7 @@ warnings.filterwarnings("ignore")
 
 
 # ===============================================================
-#  CONFIG  - NSE scrape settings  (unchanged)
+#  CONFIG  - NSE scrape settings
 # ===============================================================
 
 TRADED_VALUE_MIN_CR = 10
@@ -100,14 +100,14 @@ try {
 """
 
 # ===============================================================
-#  CONFIG  - Chart settings  (HOURLY adaptations marked with *)
+#  CONFIG  - Chart settings  (75-MIN)
 # ===============================================================
 
 EXCHANGE_SFX    = ".NS"
-OUTPUT_DIR      = "YF_H_TO_10Cr"        # * new output folder
-INTERVAL        = "1h"                   # * hourly candles
-PERIOD_DAYS     = 60                     # * ~60 days of hourly data
-MAX_BARS        = 500                    # * show up to 500 hourly bars
+OUTPUT_DIR      = "YF_75M_TO_10Cr"      # output folder
+INTERVAL        = "1h"                   # download 1h; resample to 75m below
+PERIOD_DAYS     = 60                     # ~60 days of data
+MAX_BARS        = 250                    # plot up to 250 candles on chart
 
 EMA_PERIOD      = 9
 MACD_FAST       = 12
@@ -115,10 +115,10 @@ MACD_SLOW       = 26
 MACD_SIGNAL     = 9
 RECENT_LOW_BARS = 20
 
-CANDLE_BODY_WIDTH = 0.6                 # * slightly narrower for hourly density
+CANDLE_BODY_WIDTH = 0.6
 CANDLE_WICK_WIDTH = 0.10
 
-IST_OFFSET = timedelta(hours=5, minutes=30)   # * UTC to IST
+IST_OFFSET = timedelta(hours=5, minutes=30)   # UTC to IST
 
 STYLE = {
     "bg":          "#131722",
@@ -141,7 +141,7 @@ STYLE = {
 
 
 # ===============================================================
-#  STEP 1A - BROWSER SETUP  (unchanged)
+#  STEP 1A - BROWSER SETUP
 # ===============================================================
 
 def build_driver(headless, download_dir):
@@ -233,7 +233,7 @@ def warm_session(driver):
 
 
 # ===============================================================
-#  STEP 1B - XHR DATA FETCH  (unchanged)
+#  STEP 1B - XHR DATA FETCH
 # ===============================================================
 
 def _find_records_in_json(payload):
@@ -282,7 +282,7 @@ def fetch_via_xhr(driver):
 
 
 # ===============================================================
-#  STEP 1C - CSV BUTTON FALLBACK  (unchanged)
+#  STEP 1C - CSV BUTTON FALLBACK
 # ===============================================================
 
 def _wait_for_csv(dl_dir):
@@ -339,7 +339,7 @@ def fetch_via_csv_button(driver, dl_dir):
 
 
 # ===============================================================
-#  STEP 1D - NORMALISE TO STANDARD DATAFRAME  (unchanged)
+#  STEP 1D - NORMALISE TO STANDARD DATAFRAME
 # ===============================================================
 
 def safe_num(v):
@@ -361,15 +361,15 @@ def normalise_json(records):
         vol    = safe_num(d.get("totalTradedVolume",
                           d.get("tradedQuantity", 0)))
         rows.append({
-            "Symbol":           sym,
-            "Company":          str(d.get("companyName", "")).strip(),
-            "Series":           str(d.get("series", "EQ")).strip(),
-            "LTP (Rs)":         round(safe_num(d.get("lastPrice",
-                                     d.get("closePrice", 0))), 2),
-            "% Change":         round(safe_num(d.get("pChange", 0)), 2),
-            "Mkt Cap (Rs Cr)":  round(safe_num(d.get("marketCap",
-                                     d.get("market_cap", 0))), 2),
-            "Volume (Lakhs)":   round(vol / 1e5, 2),
+            "Symbol":            sym,
+            "Company":           str(d.get("companyName", "")).strip(),
+            "Series":            str(d.get("series", "EQ")).strip(),
+            "LTP (Rs)":          round(safe_num(d.get("lastPrice",
+                                      d.get("closePrice", 0))), 2),
+            "% Change":          round(safe_num(d.get("pChange", 0)), 2),
+            "Mkt Cap (Rs Cr)":   round(safe_num(d.get("marketCap",
+                                      d.get("market_cap", 0))), 2),
+            "Volume (Lakhs)":    round(vol / 1e5, 2),
             "Value (Rs Crores)": round(tv_raw / 1e7, 2),
         })
     df = pd.DataFrame(rows)
@@ -444,7 +444,7 @@ def normalise_csv(path):
 
 
 # ===============================================================
-#  STEP 1 - MASTER DOWNLOAD FUNCTION  (unchanged)
+#  STEP 1 - MASTER DOWNLOAD FUNCTION
 # ===============================================================
 
 def download_nse_data(headless, from_csv):
@@ -488,28 +488,28 @@ def download_nse_data(headless, from_csv):
         print(f"  MANUAL FALLBACK:")
         print(f"  1. Open {NSE_PAGE} in Chrome")
         print("  2. Click the down arrow CSV button")
-        print("  3. Run: python chart_generator_hourly.py --from-csv StocksTraded.csv")
+        print("  3. Run: python chart_generator_75min.py --from-csv StocksTraded.csv")
         sys.exit(1)
 
     return df
 
 
 # ===============================================================
-#  STEP 2 - FILTER  (unchanged, uses renamed column keys)
+#  STEP 2 - FILTER
 # ===============================================================
 
 def filter_stocks(df):
-    # Support both column naming conventions (Rs vs rupee symbol)
-    val_col = "Value (Rs Crores)" if "Value (Rs Crores)" in df.columns else "Value (\u20b9 Crores)"
+    val_col = "Value (Rs Crores)" if "Value (Rs Crores)" in df.columns \
+              else "Value (\u20b9 Crores)"
     ser_col = "Series"
     ltp_col = "LTP (Rs)" if "LTP (Rs)" in df.columns else "LTP (\u20b9)"
-    pct_col = "% Change"
     cmp_col = "Company"
 
     print(f"\n  Top 5 by Value before filter:")
     top5 = df[df[val_col] > 0].nlargest(5, val_col)
     for _, r in top5.iterrows():
-        print(f"    {r['Symbol']:<12}  Rs{r[val_col]:>10,.2f} Cr  Series={r[ser_col]}")
+        print(f"    {r['Symbol']:<12}  Rs{r[val_col]:>10,.2f} Cr  "
+              f"Series={r[ser_col]}")
 
     mask = (
         (df[ser_col].str.strip().str.upper() == "EQ") &
@@ -519,7 +519,6 @@ def filter_stocks(df):
     out.sort_values(val_col, ascending=False, inplace=True)
     out.reset_index(drop=True, inplace=True)
 
-    # Normalise column names for downstream use
     out.rename(columns={
         val_col: "Value (Rs Crores)",
         ltp_col: "LTP (Rs)",
@@ -553,18 +552,18 @@ def to_ist(ts):
 
 
 # ===============================================================
-#  STEP 3 - CHART  (* hourly-specific changes)
+#  STEP 3 - CHART
 # ===============================================================
 
 def plot_chart(symbol, df, output_path):
     s  = STYLE
     xs = np.arange(len(df))
 
-    # * Convert index to IST for display
+    # Convert index to IST for display
     ist_times = [to_ist(ts) for ts in df.index]
 
-    ema9                  = ema(df["Close"], EMA_PERIOD)
-    macd_l, sig, hist     = macd_calc(df["Close"], MACD_FAST, MACD_SLOW, MACD_SIGNAL)
+    ema9              = ema(df["Close"], EMA_PERIOD)
+    macd_l, sig, hist = macd_calc(df["Close"], MACD_FAST, MACD_SLOW, MACD_SIGNAL)
 
     # Recent-low calculation
     lookback           = min(RECENT_LOW_BARS, len(df))
@@ -591,9 +590,9 @@ def plot_chart(symbol, df, output_path):
     # Candlesticks
     for i, (_, row) in enumerate(df.iterrows()):
         o, h, l, c = row["Open"], row["High"], row["Low"], row["Close"]
-        is_bull    = c >= o
-        body_col   = s["up_candle"]  if is_bull else s["down_candle"]
-        wick_col   = s["wick_up"]    if is_bull else s["wick_down"]
+        is_bull  = c >= o
+        body_col = s["up_candle"]  if is_bull else s["down_candle"]
+        wick_col = s["wick_up"]    if is_bull else s["wick_down"]
 
         ax1.bar(i, h - l,      bottom=l,        width=CANDLE_WICK_WIDTH,
                 color=wick_col, zorder=2)
@@ -648,12 +647,14 @@ def plot_chart(symbol, df, output_path):
     ax1.yaxis.set_label_position("right")
     ax1.yaxis.tick_right()
 
-    leg = [mpatches.Patch(facecolor=s["up_candle"],   label="Bullish"),
-           mpatches.Patch(facecolor=s["down_candle"], label="Bearish"),
-           Line2D([0], [0], color=s["ema_color"], linewidth=1.8,
-                  label=f"EMA {EMA_PERIOD}"),
-           Line2D([0], [0], color=s["recent_low"], linewidth=1.2,
-                  linestyle="--", label=f"{RECENT_LOW_BARS}-bar Low")]
+    leg = [
+        mpatches.Patch(facecolor=s["up_candle"],   label="Bullish"),
+        mpatches.Patch(facecolor=s["down_candle"], label="Bearish"),
+        Line2D([0], [0], color=s["ema_color"], linewidth=1.8,
+               label=f"EMA {EMA_PERIOD}"),
+        Line2D([0], [0], color=s["recent_low"], linewidth=1.2,
+               linestyle="--", label=f"{RECENT_LOW_BARS}-bar Low"),
+    ]
     ax1.legend(handles=leg, loc="upper left", fontsize=8,
                framealpha=0.6, facecolor=s["bg"],
                edgecolor=s["border"], labelcolor=s["text"])
@@ -668,18 +669,20 @@ def plot_chart(symbol, df, output_path):
         (last_close, close_col,      f"Rs{last_close:,.2f}"),
         (last_ema,   s["ema_color"], f"Rs{last_ema:,.2f}"),
     ]:
-        ax1.annotate(label,
-                     xy=(1, val), xycoords=("axes fraction", "data"),
-                     xytext=(4, 0), textcoords="offset points",
-                     fontsize=8, fontweight="bold", color=s["bg"],
-                     ha="left", va="center",
-                     bbox=dict(boxstyle="round,pad=0.3", facecolor=col,
-                               edgecolor="none", alpha=0.95),
-                     annotation_clip=False)
+        ax1.annotate(
+            label,
+            xy=(1, val), xycoords=("axes fraction", "data"),
+            xytext=(4, 0), textcoords="offset points",
+            fontsize=8, fontweight="bold", color=s["bg"],
+            ha="left", va="center",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor=col,
+                      edgecolor="none", alpha=0.95),
+            annotation_clip=False,
+        )
 
     # MACD
     hcols = [s["hist_up"] if v >= 0 else s["hist_down"] for v in hist.values]
-    ax2.bar(xs, hist.values,    color=hcols, alpha=0.8,  width=0.7, zorder=2,
+    ax2.bar(xs, hist.values,    color=hcols, alpha=0.8, width=0.7, zorder=2,
             label="Histogram")
     ax2.plot(xs, macd_l.values, color=s["macd_line"],   linewidth=1.3,
              label="MACD",   zorder=3)
@@ -692,33 +695,36 @@ def plot_chart(symbol, df, output_path):
     ax2.legend(loc="upper left", fontsize=7.5, framealpha=0.6,
                facecolor=s["bg"], edgecolor=s["border"], labelcolor=s["text"])
 
-    # * X-axis: date+time labels in IST, ~16 ticks for hourly density
+    # X-axis: date+time labels in IST, ~16 ticks
     n    = len(xs)
     step = max(n // 16, 1)
     ax2.set_xticks(xs[::step])
     ax2.set_xticklabels(
         [ist_times[i].strftime("%d %b  %H:%M") for i in range(0, n, step)],
-        rotation=35, ha="right", fontsize=7, color=s["subtext"])
+        rotation=35, ha="right", fontsize=7, color=s["subtext"],
+    )
     plt.setp(ax1.get_xticklabels(), visible=False)
 
-    # * Title block
+    # Title block
     lc   = df["Close"].iloc[-1]
     fc   = df["Close"].iloc[0]
     pct  = (lc - fc) / fc * 100
     sign = "+" if pct >= 0 else ""
     ccol = s["up_candle"] if pct >= 0 else s["down_candle"]
 
-    fig.text(0.05, 0.955, f"{symbol}  |  NSE  |  Hourly",
+    fig.text(0.05, 0.955, f"{symbol}  |  NSE  |  75 Min",
              color=s["text"], fontsize=13, fontweight="bold")
     fig.text(0.05, 0.935, f"Rs{lc:,.2f}   {sign}{pct:.2f}%  ({PERIOD_DAYS}D)",
              color=ccol, fontsize=10)
     latest_ist = ist_times[-1].strftime("%d %b %Y  %H:%M IST")
     fig.text(0.96, 0.955, f"Latest: {latest_ist}",
              color=s["text"], fontsize=9, ha="right", fontweight="bold")
-    fig.text(0.96, 0.935,
-             f"MACD ({MACD_FAST},{MACD_SLOW},{MACD_SIGNAL})  |  EMA {EMA_PERIOD}"
-             f"  |  Bars: {len(df)}  |  Data: yfinance",
-             color=s["subtext"], fontsize=8, ha="right")
+    fig.text(
+        0.96, 0.935,
+        f"MACD ({MACD_FAST},{MACD_SLOW},{MACD_SIGNAL})  |  EMA {EMA_PERIOD}"
+        f"  |  Bars: {len(df)}  |  75Min  |  Data: yfinance",
+        color=s["subtext"], fontsize=8, ha="right",
+    )
 
     plt.savefig(output_path, dpi=150, bbox_inches="tight",
                 facecolor=s["bg"], edgecolor="none")
@@ -726,13 +732,13 @@ def plot_chart(symbol, df, output_path):
 
 
 # ===============================================================
-#  STEP 3 - BATCH CHART GENERATOR  (* hourly download)
+#  STEP 3 - BATCH CHART GENERATOR
 # ===============================================================
 
 def generate_charts(filtered_df):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     end_date   = datetime.datetime.today() + timedelta(days=1)
-    start_date = end_date - timedelta(days=PERIOD_DAYS + 1)   # * 60-day window
+    start_date = end_date - timedelta(days=PERIOD_DAYS + 1)
     success, failed = [], []
     total = len(filtered_df)
 
@@ -742,11 +748,12 @@ def generate_charts(filtered_df):
         print(f"\n[{idx:>4}/{total}]  {ticker:<22}", end="  ", flush=True)
 
         try:
+            # ── Download 1h bars from yfinance ──────────────────────────
             df = yf.download(
                 ticker,
                 start=start_date.strftime("%Y-%m-%d"),
                 end=end_date.strftime("%Y-%m-%d"),
-                interval=INTERVAL,          # * "1h"
+                interval=INTERVAL,          # "1h"
                 auto_adjust=True,
                 progress=False,
             )
@@ -761,7 +768,8 @@ def generate_charts(filtered_df):
 
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
             df.index = pd.to_datetime(df.index)
-# * Keep only NSE trading hours (09:15-15:30 IST)
+
+            # ── Filter to NSE market hours (09:15-15:30 IST) ────────────
             if df.index.tzinfo is not None:
                 df_ist = df.copy()
                 df_ist.index = df_ist.index.tz_convert("Asia/Kolkata")
@@ -773,12 +781,30 @@ def generate_charts(filtered_df):
             else:
                 df_ist = df
 
-            df = df.tail(MAX_BARS)         # * cap at MAX_BARS hourly candles
+            # ── Resample 1h -> 75-minute OHLCV bars ─────────────────────
+            # closed="left"  : bar [09:15, 10:30) labelled at 09:15
+            # label="left"   : timestamp shown is bar open time
+            df = df.resample("75min", closed="left", label="left").agg({
+                "Open":   "first",
+                "High":   "max",
+                "Low":    "min",
+                "Close":  "last",
+                "Volume": "sum",
+            }).dropna()
+
+            # Remove any residual bars outside market hours after resample
+            df = df[
+                (df.index.time >= datetime.time(9, 15)) &
+                (df.index.time <= datetime.time(15, 30))
+            ]
+
+            df = df.tail(MAX_BARS)          # cap at 250 candles
 
             if len(df) < MACD_SLOW + MACD_SIGNAL + 5:
-                print(f"Too few bars after market-hours filter ({len(df)})")
+                print(f"Too few bars after resample ({len(df)})")
                 failed.append(sym)
                 continue
+
             out = os.path.join(OUTPUT_DIR, f"{sym}.png")
             plot_chart(sym, df, out)
             print(f"OK  {len(df)} bars  ->  {out}")
@@ -798,7 +824,7 @@ def generate_charts(filtered_df):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="NSE Live -> Filter -> Hourly Charts (EMA9 + MACD + Recent Low)"
+        description="NSE Live -> Filter -> 75-Min Charts (EMA9 + MACD + Recent Low)"
     )
     parser.add_argument(
         "--visible", action="store_true",
@@ -813,10 +839,11 @@ def main():
 
     run_time = datetime.datetime.now().strftime("%d %b %Y  %H:%M:%S")
     print(f"\n{'='*60}")
-    print(f"  Chart Generator  -  NSE Live  |  HOURLY  |  {run_time}")
+    print(f"  Chart Generator  -  NSE Live  |  75-MIN  |  {run_time}")
     print(f"  Step 1 : Download NSE Stocks Traded")
     print(f"  Step 2 : Filter  Value > Rs{TRADED_VALUE_MIN_CR} Cr  (EQ series)")
-    print(f"  Step 3 : Hourly charts ({PERIOD_DAYS}D window)  ->  {OUTPUT_DIR}/")
+    print(f"  Step 3 : 75-Min charts ({PERIOD_DAYS}D window, {MAX_BARS} bars)"
+          f"  ->  {OUTPUT_DIR}/")
     print(f"{'='*60}")
 
     # STEP 1
@@ -865,7 +892,7 @@ def main():
 
     # STEP 3
     print(f"\n{'-'*60}")
-    print(f"  STEP 3  -  Generating HOURLY charts  ->  {OUTPUT_DIR}/")
+    print(f"  STEP 3  -  Generating 75-MIN charts  ->  {OUTPUT_DIR}/")
     print(f"{'-'*60}")
     success, failed = generate_charts(filtered)
 
