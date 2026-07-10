@@ -30,18 +30,18 @@ jobs:
         run: pip install yfinance pandas openpyxl matplotlib selenium webdriver-manager
 
       - name: Run chart generator
-        run: python YF_H_500_New.py
+        run: python YF_75M_500_New.py
 
       - name: Check charts output
         run: |
           echo "=== Current directory ==="
           ls -la
           echo "=== Charts folder ==="
-          ls -la YF_H_TO_10Cr/ || echo "YF_H_TO_10Cr/ folder does not exist!"
+          ls -la YF_75M_TO_10Cr/ || echo "YF_75M_TO_10Cr/ folder does not exist!"
 
       - name: Zip charts folder
         run: |
-          FOLDER="YF_H_TO_10Cr"
+          FOLDER="YF_75M_TO_10Cr"
           if [ -d "$FOLDER" ] && [ "$(ls -A $FOLDER)" ]; then
             cd "$FOLDER"
             ZIP_NAME="charts_NSE_10Cr_$(date +'%Y-%m-%d').zip"
