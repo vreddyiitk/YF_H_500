@@ -766,10 +766,10 @@ def generate_charts(filtered_df):
             if df.index.tzinfo is not None:
               df_ist = df.copy()
               df_ist.index = df_ist.index.tz_convert("Asia/Kolkata")
-                market_mask = (
+                  market_mask = (
                   (df_ist.index.time >= datetime.time(9, 15)) &
                   (df_ist.index.time <= datetime.time(15, 30))
-                )
+                  )
                df = df_ist[market_mask]   # filter df_ist, keep IST index
             else:
                df_ist = df
