@@ -761,25 +761,24 @@ def generate_charts(filtered_df):
 
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
             df.index = pd.to_datetime(df.index)
-
-            # * Keep only NSE trading hours (09:15-15:30 IST)
+# * Keep only NSE trading hours (09:15-15:30 IST)
             if df.index.tzinfo is not None:
-              df_ist = df.copy()
-              df_ist.index = df_ist.index.tz_convert("Asia/Kolkata")
-                  market_mask = (
-                  (df_ist.index.time >= datetime.time(9, 15)) &
-                  (df_ist.index.time <= datetime.time(15, 30))
-                  )
-               df = df_ist[market_mask]   # filter df_ist, keep IST index
+                df_ist = df.copy()
+                df_ist.index = df_ist.index.tz_convert("Asia/Kolkata")
+                market_mask = (
+                    (df_ist.index.time >= datetime.time(9, 15)) &
+                    (df_ist.index.time <= datetime.time(15, 30))
+                )
+                df = df_ist[market_mask]
             else:
-               df_ist = df
+                df_ist = df
+
             df = df.tail(MAX_BARS)         # * cap at MAX_BARS hourly candles
 
             if len(df) < MACD_SLOW + MACD_SIGNAL + 5:
                 print(f"Too few bars after market-hours filter ({len(df)})")
                 failed.append(sym)
                 continue
-
             out = os.path.join(OUTPUT_DIR, f"{sym}.png")
             plot_chart(sym, df, out)
             print(f"OK  {len(df)} bars  ->  {out}")
